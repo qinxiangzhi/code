@@ -1,8 +1,8 @@
 # code
 code
 目录：
-  or条件查询时，结合0、1两个列子得出差异
-  Criteria添加条件时如果遇上or条件时，结合2、3两个列子得出差异
+  or条件查询时，结合0、1两个例子得出差异
+  Criteria添加条件时如果遇上or条件时，结合2、3两个例子得出差异
 
 0.
   DepartmentExample departmentExample = new DepartmentExample();
