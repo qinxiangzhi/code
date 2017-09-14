@@ -1,0 +1,33 @@
+# code
+code
+1.DepartmentExample departmentExample = new DepartmentExample();
+  departmentExample.createCriteria().andTenantIdEqualTo(tenantId).andBranchIdIsNull().andStatusIdIn(departmentState);
+  departmentExample.or().andTenantIdEqualTo(tenantId).andBranchIdEqualTo(0L).andStatusIdIn(departmentState);      
+  departmentExample.setOrderByClause(" id ");
+  departmentList = departmentMapper.selectByExample(departmentExample);
+  
+  ->SELECT id, tenant_id, branch_id, CODE, NAME, parent_id, type_id, status_id, pinyin, note, creater_id, created_date, modifier_id, modified_date, erp_code, created_employee_id, modified_employee_id FROM ba_department 
+WHERE ( tenant_id = 6001263 AND branch_id IS NULL AND status_id IN ( 1 , 0 ) ) OR( tenant_id = 6001263 AND branch_id =0 AND status_id IN ( 1 ,0 ) ) ORDER BY id
+
+
+
+2.DepartmentExample departmentExample = new DepartmentExample();
+  DepartmentExample.Criteria criteria = departmentExample.createCriteria().andTenantIdEqualTo(tenantId).andBranchIdIsNull().andStatusIdIn(departmentState);
+  criteria.andParentIdEqualTo(0L);
+  departmentExample.or().andTenantIdEqualTo(tenantId).andBranchIdEqualTo(0L).andStatusIdIn(departmentState);      
+  departmentExample.setOrderByClause(" id ");
+  departmentList = departmentMapper.selectByExample(departmentExample);
+
+  ->SELECT id, tenant_id, branch_id, CODE, NAME, parent_id, type_id, status_id, pinyin, note, creater_id, created_date, modifier_id, modified_date, erp_code, created_employee_id, modified_employee_id FROM ba_department 
+WHERE ( tenant_id = ? AND branch_id IS NULL AND status_id IN ( ? , ? ) AND parent_id = ? ) OR( tenant_id = ? AND branch_id = ? AND status_id IN ( ? , ? ) ) ORDER BY id
+
+3.DepartmentExample departmentExample = new DepartmentExample();
+  DepartmentExample.Criteria criteria = departmentExample.createCriteria().andTenantIdEqualTo(tenantId).andBranchIdIsNull().andStatusIdIn(departmentState);
+  criteria.andParentIdEqualTo(0L);
+  DepartmentExample.Criteria criteria1 = departmentExample.or().andTenantIdEqualTo(tenantId).andBranchIdEqualTo(0L).andStatusIdIn(departmentState);      
+  criteria1.andParentIdEqualTo(0L);
+  departmentExample.setOrderByClause(" id ");
+  departmentList = departmentMapper.selectByExample(departmentExample);
+
+  ->SELECT id, tenant_id, branch_id, CODE, NAME, parent_id, type_id, status_id, pinyin, note, creater_id, created_date, modifier_id, modified_date, erp_code, created_employee_id, modified_employee_id FROM ba_department 
+WHERE ( tenant_id = ? AND branch_id IS NULL AND status_id IN ( ? , ? ) AND parent_id = ? ) OR( tenant_id = ? AND branch_id = ? AND status_id IN ( ? , ? ) AND parent_id = ?) ORDER BY id
