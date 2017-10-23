@@ -1,90 +1,55 @@
-Spring Transaction中有一个很重要的属性：Propagation。主要用来配置当前需要执行的方法，与当前是否有transaction之间的关系。
+一、描述
+Spring遇到嵌套事务时，当被嵌套的事务被定义为“PROPAGATION_REQUIRES_NEW”时，
+内层Service的方法被调用时，外层方法的事务被挂起；
+内层事务相对于外层事务是完全独立的，有独立的隔离性等等。
 
-我晓得有点儿抽象，这也是为什么我想要写这篇博客的原因。看了后面的例子，大家应该就明白了。
+二、实验
+但实验时却遇到一个奇怪的问题：
+@Service
+public class A {
 
+    @Autowired
+    private OrderApplyMapper orderApplyMapper;
 
-一、Propagation取值：
+    @Transactional(propagation = Propagation.REQUIRES_NEW, readOnly = false, rollbackFor = Exception.class)
+    public int testB(OrderApply order) {
+        return orderApplyMapper.save(order);
+    }
 
-REQUIRED（默认值）：在有transaction状态下执行；如当前没有transaction，则创建新的transaction；
-
-SUPPORTS：如当前有transaction，则在transaction状态下执行；如果当前没有transaction，在无transaction状态下执行；
-
-MANDATORY：必须在有transaction状态下执行，如果当前没有transaction，则抛出异常IllegalTransactionStateException；
-
-REQUIRES_NEW：创建新的transaction并执行；如果当前已有transaction，则将当前transaction挂起；
-
-NOT_SUPPORTED：在无transaction状态下执行；如果当前已有transaction，则将当前transaction挂起；
-
-NEVER：在无transaction状态下执行；如果当前已有transaction，则抛出异常IllegalTransactionStateException。
-
-
-二、REQUIRED与REQUIRED_NEW
-
-上面描述的6种propagation属性配置中，最难以理解，并且容易在transaction设计时出现问题的是REQUIRED和REQURED_NEW这两者的区别。当程序在某些情况下抛出异常时，如果对于这两者不够了解，就可能很难发现而且解决问题。
-
-
-下面我们给出三个场景进行分析：
-
-场景一：
-
-ServiceA.java:
-
-public class ServiceA {
     @Transactional
-    public void callB() {
-        serviceB.doSomething();
+    public void testA(OrderApply order) {
+        System.out.println("1111111111111");
+        testB(order);
+        System.out.println("2222222222222");
+        throw new RuntimeException();
+    }
+
+}
+@Service
+public class B {
+
+    @Autowired
+    private OrderApplyMapper orderApplyMapper;
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW, readOnly = false, rollbackFor = Exception.class)
+    public int testB(OrderApply order) {
+        return orderApplyMapper.save(order);
     }
 }
+1、当A.testA()方法调用B.testB()方法时，内层事务提交和回滚，都不受外层事务提交或回滚的影响。
+2、当A.testA()方法调用A.testB()方法时，内层事务不能正确地提交或回滚。
 
-ServiceB.java
+三、分析和结论
+1、method_Two()会不会创建一个新事务？ 
+答：不会创建。仔细查看了日志，没有找到类似creating new transaction的输出，应该是因为在同一个Service类中，spring并不重新创建新事务，如果是两不同的Service，就会创建新事务了。 
+那么为什么spring只对跨Service的方法才生效？ 
+Debug代码发现跨Service调用方法时，都会经过org.springframework.aop.framework.CglibAopProxy.DynamicAdvisedInterceptor.intercept()方法，只有经过此处，才能对事务进行控制。 
 
-public class ServiceB {
-    @Transactional
-    public void doSomething() {
-        throw new RuntimeException("B throw exception");
-    }
-}
-这种情况下，我们只需要在调用ServiceA.callB时捕获ServiceB中抛出的运行时异常，则transaction就会正常的rollback。
+2、不同的Service调用方法时：
+如果被调用方法是Propagation.REQUIRES_NEW，被catch后不抛出，事务可以正常提交； 
+如果被调用方法是Propagation.REQUIRED，被catch后不抛出，后面的代码虽然可以执行下去，但最终还是会分出rollback-only异常；
 
-
-场景二
-
-在保持场景一中ServiceB不变，在ServiceA中调用ServiceB的doSomething时去捕获这个异常，如下：
-
-public class ServiceA {
-    @Transactional
-    public void callB() {
-        try {
-            serviceB.doSomething();
-        } catch (RuntimeException e) {
-            System.err.println(e.getMessage());
-        }
-    }
-}
-这个时候，我们再调用ServiceA的callB。程序会抛出org.springframework.transaction.UnexpectedRollbackException: Transaction rolled back because it has been marked as rollback-only这样一个异常信息。原因是什么呢？
-
-因为在ServiceA和ServiceB中的@Transactional propagation都采用的默认值：REQUREID。根据我们前面讲过的REQUIRED特性，当ServiceA调用ServiceB的时候，他们是处于同一个transaction中。如下图所示：
-
-
-当ServiceB中抛出了一个异常以后，ServiceB会把当前的transaction标记为需要rollback。但是ServiceA中捕获了这个异常，并进行了处理，认为当前transaction应该正常commit。此时就出现了前后不一致，也就是因为这样，抛出了前面的UnexpectedRollbackException。
-
-
-场景三
-
-在保持场景二中ServiceA不变，修改ServiceB中方法的propagation配置为REQUIRES_NEW，如下：
-
-public class ServiceB {
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void doSomething() {
-        throw new RuntimeException("B throw exception");
-    }
-}
-此时，程序可以正常的退出了，也没有抛出UnexpectedRollbackException。原因是因为当ServiceA调用ServiceB时，serviceB的doSomething是在一个新的transaction中执行的。如下图所示：
-
-
-所以，当doSomething抛出异常以后，仅仅是把新创建的transaction rollback了，而不会影响到ServiceA的transaction。ServiceA就可以正常的进行commit。
-
-当然这里把ServiceA和ServiceB放在两个独立的transaction是否成立，还需要再多多考虑你的业务需求。
-
-摘自：http://blog.csdn.net/kiwi_coder/article/details/20214939
-备份备忘
+3、同一个Service中调用方法时：
+不论注解是Propagation.REQUIRES_NEW 还是 Propagation.REQUIRED，
+其结果都是一样的，就是都被忽略掉了，等于没写。
+当其抛出异常时，只需catch住不抛出，事务就可以正常提交。
