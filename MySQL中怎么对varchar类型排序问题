@@ -1,9 +1,9 @@
 # code
 code
 MySQL中怎么对varchar类型排序问题
-asc 升级
+asc  升序
 
-desc降序
+desc 降序
 
 在mysql默认order by 只对数字与日期类型可以排序，但对于varchar字符型类型排序好像没有用了，下面我来给各位同学介绍varchar类型排序问题如何解决。
 
